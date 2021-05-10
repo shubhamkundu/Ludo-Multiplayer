@@ -41,11 +41,6 @@ const keys = {
         go: 'c'
     },
 };
-const titleMapping = {
-    defaultPlayDeadTokenForSix: 'Default play dead token for six:',
-    defaultPlayOutsideToken: 'Default play outside token:',
-    playerType: 'Player Type:'
-};
 const roomCellsForLiveTokens = {
     red: {
         red: [{ x: 2, y: 6 }, { x: 3, y: 6 }, { x: 4, y: 6 }, { x: 5, y: 6 }],
@@ -124,57 +119,64 @@ const steps = {
 };
 // static variables - end
 
-let currentPlayerColor, currentDiceN, justEliminated, validTokensLength, activeColors, winnerColors;
+let currentPlayerColor, currentDiceN, justEliminated, validTokensLength, thisTeam,
+    activeColors, winnerColors;
 
 // for settings
-let nPlayer, settingsOpen, soundStatus, ongoingGame, gameEnded,
-    defaultPlayDeadTokenForSix, defaultPlayOutsideToken, playerType, paused;
+let soundStatus, gameEnded, playerType;
 
 // for log
 let activities;
 
-// for keypress game
-let currentSelectedTokenN, selectedTokenI;
-const keyValidity = {
-    turn: false,
-    select: false,
-    go: false
-};
+const socket = io();
+socket.on('connect', function () {
+    console.log('User connected to client');
+    var params = jQuery.deparam(window.location.search);
+
+    socket.emit('join', {
+        name: params.name,
+        room: params.room
+    }, function (e) {
+        window.location.href = '/';
+        alert(e.message);
+    });
+
+    socket.on('clickCell', function (data) {
+        onClickCell(data);
+    });
+    socket.on('clickToken', function (data) {
+        onClickToken(data);
+    });
+    socket.on('setActiveTeam', function (data) {
+        setActiveTeam(data);
+    });
+    socket.on('setThisTeam', function (data) {
+        setThisTeam(data);
+    });
+});
 
 // functions - start
 
+function setThisTeam(data) {
+    thisTeam = data.thisTeam;
+}
+
 function reset() {
-    nPlayer = parseInt(sessionStorage.getItem('nPlayer'));
-    sessionStorage.removeItem('nPlayer');
-    if (isNaN(nPlayer)) {
-        nPlayer = 4;
-    }
-    if (nPlayer === 4) {
-        activeColors = ['red', 'blue', 'yellow', 'green'];
-    } else {
-        activeColors = ['red', 'yellow'];
-    }
+    activeColors = ['red', 'blue', 'yellow', 'green'];
     winnerColors = [];
     justEliminated = false;
     validTokensLength = 0;
-    settingsOpen = false;
     soundStatus = 'on';
-    ongoingGame = false;
     gameEnded = false;
-    defaultPlayDeadTokenForSix = {};
-    defaultPlayOutsideToken = {};
     playerType = {
         red: 'manual',
         blue: 'automatic',
         yellow: 'automatic',
         green: 'automatic'
     };
-    paused = false;
     activities = [];
 
     drawCells();
-    drawSettings();
-    hideElementById('table-settings');
     styleCells();
     initializeStars();
     drawTokens('initial');
@@ -190,14 +192,6 @@ function removeFromArr(arr, el) {
 function onLoad() {
     reset();
     startGame();
-}
-
-function drawSettingsButton(x, y) {
-    const settingsButtonHTML = '<i id="settings-button" class="fas fa-cog"></i>';
-    $('#cell-' + y + '-' + x).append(settingsButtonHTML);
-    $('#cell-' + y + '-' + x).on('click', function () {
-        openSettings();
-    });
 }
 
 function drawSoundButton(x, y) {
@@ -230,92 +224,17 @@ function setSoundStatus(status) {
     }
 }
 
-function drawNPlayerButton(x, y) {
-    const fourPlayerButtonHTML = '<i id="i-4-player" class="fas fa-users" title="Change to 2-player mode."></i>';
-    $('#cell-' + y + '-' + x).append(fourPlayerButtonHTML);
-    const twoPlayerButtonHTML = '<i id="i-2-player" class="fas fa-user-friends"></i>';
-    $('#cell-' + y + '-' + x).append(twoPlayerButtonHTML);
-    $('#cell-' + y + '-' + x).on('click', function () {
-        toggleNPlayer();
-    });
-    setNPlayer(nPlayer);
-}
-
-function toggleNPlayer() {
-    const confirmMsg = 'You need to Restart Game. Continue?';
-    if (!ongoingGame || confirm(confirmMsg)) {
-        if (nPlayer === 4) {
-            setNPlayer(2);
-        } else {
-            setNPlayer(4);
-        }
-        location.reload();
-    }
-}
-
-function setNPlayer(n) {
-    nPlayer = n;
-    sessionStorage.setItem('nPlayer', n);
-    if (nPlayer === 4) {
-        hideElementById('i-2-player');
-        showElementById('i-4-player');
-    } else if (nPlayer === 2) {
-        hideElementById('i-4-player');
-        showElementById('i-2-player');
-    }
-}
-
-function drawPlayPauseButton(x, y) {
-    const pauseButtonHTML = '<i id="i-pause" class="fas fa-pause"></i>';
-    $('#cell-' + y + '-' + x).append(pauseButtonHTML);
-    const playButtonHTML = '<i id="i-play" class="fas fa-play"></i>';
-    $('#cell-' + y + '-' + x).append(playButtonHTML);
-    $('#cell-' + y + '-' + x).on('click', function () {
-        togglePlayPause();
-    });
-    setPaused(paused);
-}
-
-function togglePlayPause() {
-    if (paused === true) {
-        setPaused(false);
-    } else {
-        setPaused(true);
-        alert('Resume Game?');
-        setPaused(false);
-    }
-}
-
-function setPaused(status) {
-    paused = status;
-    if (paused === true) {
-        hideElementById('i-pause');
-        showElementById('i-play');
-    } else if (paused === false) {
-        hideElementById('i-play');
-        showElementById('i-pause');
-    }
-}
-
-function openSettings() {
-    settingsOpen = true;
-    hideElementById('table-board');
-    showElementById('table-settings');
-    lifeControls();
-}
-
-function drawBoardButton(x, y) {
-    const boardButtonHTML = '<i class="fas fa-chess-board"></i>';
-    $('#scell-' + y + '-' + x).append(boardButtonHTML);
-    $('#scell-' + y + '-' + x).on('click', function () {
-        closeSettings();
+function stopAllAudio() {
+    $('audio').each(function () {
+        $(this).trigger('load');
     });
 }
 
-function closeSettings() {
-    settingsOpen = false;
-    hideElementById('table-settings');
-    showElementById('table-board');
+function playAudio(id) {
+    if (soundStatus === 'on') {
+        stopAllAudio();
+        $('#' + id).trigger('play');
+    }
 }
 
 function hideElementById(id) {
@@ -324,166 +243,6 @@ function hideElementById(id) {
 
 function showElementById(id) {
     $('#' + id).show();
-}
-
-function drawSettings() {
-    let settingsHTML = '<table id="table-settings">';
-    for (let i = 0; i < 17; i++) {
-        settingsHTML += '<tr class="srow" id="srow-' + i + '">';
-        if (i === 0 || i === 16) {
-            for (let j = 0; j < 17; j++) {
-                settingsHTML += '<td class="scell" id="scell-' + i + '-' + j + '"></td>';
-            }
-        } else {
-            settingsHTML += '<td class="scell" id="scell-' + i + '-' + 0 + '"></td>';
-            settingsHTML += '<td colspan="7" class="scell middle" id="scell-' + i + '-' + 1 + '"></td>';
-            settingsHTML += '<td colspan="8" class="scell middle" id="scell-' + i + '-' + 2 + '"></td>';
-            settingsHTML += '<td class="scell" id="scell-' + i + '-' + 3 + '"></td>';
-        }
-        settingsHTML += '</tr>';
-    }
-    settingsHTML += '</table>';
-    $('#main').append(settingsHTML);
-    drawBoardButton(16, 0);
-    drawSpecificSettings(1, 'defaultPlayDeadTokenForSix');
-    drawSpecificSettings(2, 'defaultPlayOutsideToken');
-    drawSpecificSettings(3, 'playerType');
-}
-
-function drawSpecificSettings(y, type) {
-    drawTitle(y, type);
-    drawControls(y, type);
-    lifeControls(type);
-}
-
-function drawTitle(y, type) {
-    $('#scell-' + y + '-' + 1).text(titleMapping[type]);
-}
-
-function drawControls(y, type) {
-    let controlHTML = '';
-
-    if (type === 'defaultPlayDeadTokenForSix') {
-        controlHTML += '<input type="radio" id="defaultPlayDeadTokenForSix-on" name="defaultPlayDeadTokenForSix"> On';
-        controlHTML += '<input type="radio" id="defaultPlayDeadTokenForSix-off" name="defaultPlayDeadTokenForSix"> Off';
-    } else if (type === 'defaultPlayOutsideToken') {
-        controlHTML += '<input type="radio" id="defaultPlayOutsideToken-on" name="defaultPlayOutsideToken"> On';
-        controlHTML += '<input type="radio" id="defaultPlayOutsideToken-off" name="defaultPlayOutsideToken"> Off';
-    } else if (type === 'playerType') {
-        controlHTML += '<br>Red:<br>';
-        controlHTML += '<input type="radio" id="playerTypeRed-manual" name="playerTypeRed"> Manual<br>';
-        controlHTML += '<input type="radio" id="playerTypeRed-automatic" name="playerTypeRed"> Automatic<br>';
-        controlHTML += '<br>Blue:<br>';
-        controlHTML += '<input type="radio" id="playerTypeBlue-manual" name="playerTypeBlue"> Manual<br>';
-        controlHTML += '<input type="radio" id="playerTypeBlue-automatic" name="playerTypeBlue"> Automatic<br>';
-        controlHTML += '<br>Yellow:<br>';
-        controlHTML += '<input type="radio" id="playerTypeYellow-manual" name="playerTypeYellow"> Manual<br>';
-        controlHTML += '<input type="radio" id="playerTypeYellow-automatic" name="playerTypeYellow"> Automatic<br>';
-        controlHTML += '<br>Green:<br>';
-        controlHTML += '<input type="radio" id="playerTypeGreen-manual" name="playerTypeGreen"> Manual<br>';
-        controlHTML += '<input type="radio" id="playerTypeGreen-automatic" name="playerTypeGreen"> Automatic<br>';
-    }
-
-    $('#scell-' + y + '-' + 2).append(controlHTML);
-}
-
-function lifeControls(type) {
-    if (!type || type === 'defaultPlayDeadTokenForSix') {
-        $('#defaultPlayDeadTokenForSix-on').on('click', function () {
-            defaultPlayDeadTokenForSix[currentPlayerColor] = true;
-        });
-        $('#defaultPlayDeadTokenForSix-off').on('click', function () {
-            defaultPlayDeadTokenForSix[currentPlayerColor] = false;
-        });
-        if (defaultPlayDeadTokenForSix[currentPlayerColor] === true) {
-            $('#defaultPlayDeadTokenForSix-on').click();
-        } else {
-            $('#defaultPlayDeadTokenForSix-off').click();
-        }
-    }
-
-    if (!type || type === 'defaultPlayOutsideToken') {
-        $('#defaultPlayOutsideToken-on').on('click', function () {
-            defaultPlayOutsideToken[currentPlayerColor] = true;
-        });
-        $('#defaultPlayOutsideToken-off').on('click', function () {
-            defaultPlayOutsideToken[currentPlayerColor] = false;
-        });
-        if (defaultPlayOutsideToken[currentPlayerColor] === true) {
-            $('#defaultPlayOutsideToken-on').click();
-        } else {
-            $('#defaultPlayOutsideToken-off').click();
-        }
-    }
-
-    if (!type || type === 'playerType') {
-        $('#playerTypeRed-manual').on('click', function () {
-            playerType['red'] = 'manual';
-        });
-        $('#playerTypeRed-automatic').on('click', function () {
-            playerType['red'] = 'automatic';
-        });
-        if (playerType['red'] === 'manual') {
-            $('#playerTypeRed-manual').click();
-        } else if (playerType['red'] === 'automatic') {
-            $('#playerTypeRed-automatic').click();
-        }
-
-        $('#playerTypeBlue-manual').on('click', function () {
-            playerType['blue'] = 'manual';
-        });
-        $('#playerTypeBlue-automatic').on('click', function () {
-            playerType['blue'] = 'automatic';
-        });
-        if (playerType['blue'] === 'manual') {
-            $('#playerTypeBlue-manual').click();
-        } else if (playerType['blue'] === 'automatic') {
-            $('#playerTypeBlue-automatic').click();
-        }
-
-        $('#playerTypeYellow-manual').on('click', function () {
-            playerType['yellow'] = 'manual';
-        });
-        $('#playerTypeYellow-automatic').on('click', function () {
-            playerType['yellow'] = 'automatic';
-        });
-        if (playerType['yellow'] === 'manual') {
-            $('#playerTypeYellow-manual').click();
-        } else if (playerType['yellow'] === 'automatic') {
-            $('#playerTypeYellow-automatic').click();
-        }
-
-        $('#playerTypeGreen-manual').on('click', function () {
-            playerType['green'] = 'manual';
-        });
-        $('#playerTypeGreen-automatic').on('click', function () {
-            playerType['green'] = 'automatic';
-        });
-        if (playerType['green'] === 'manual') {
-            $('#playerTypeGreen-manual').click();
-        } else if (playerType['green'] === 'automatic') {
-            $('#playerTypeGreen-automatic').click();
-        }
-    }
-}
-
-function onKeyPress(ev) {
-    if (keys[currentPlayerColor]) {
-        if (ev.key === keys[currentPlayerColor].turn && keyValidity.turn) {
-            onClickPlayButton(currentPlayerColor);
-        } else if (ev.key === keys[currentPlayerColor].select && keyValidity.select) {
-            onMouseoutToken(currentPlayerColor);
-            selectedTokenI = selectedTokenI === validTokensLength - 1 || selectedTokenI === undefined ? 0 : selectedTokenI + 1;
-            const token = $('.clickable:nth(' + selectedTokenI + ')');
-            $('.selected').removeClass('selected');
-            token.addClass('selected');
-            currentSelectedTokenN = parseInt(token.attr('id').split('-')[2]);
-            onMouseoverToken(currentPlayerColor, currentSelectedTokenN, currentDiceN);
-            keyValidity.go = true;
-        } else if (ev.key === keys[currentPlayerColor].go && keyValidity.go) {
-            onClickToken(currentPlayerColor, currentSelectedTokenN, currentDiceN);
-        }
-    }
 }
 
 function startGame() {
@@ -500,11 +259,6 @@ function passTo(color) {
     justEliminated = false;
     currentPlayerColor = color;
     showPlayButton(currentPlayerColor);
-    if (playerType[color] === 'manual') {
-        showElementById('settings-button');
-    } else if (playerType[color] === 'automatic') {
-        hideElementById('settings-button');
-    }
 }
 
 function passToNext(color) {
@@ -535,19 +289,6 @@ function getDicePosition(color) {
             x: 7,
             y: 9
         };
-    }
-}
-
-function stopAllAudio() {
-    $('audio').each(function () {
-        $(this).trigger('load');
-    });
-}
-
-function playAudio(id) {
-    if (soundStatus === 'on') {
-        stopAllAudio();
-        $('#' + id).trigger('play');
     }
 }
 
@@ -601,7 +342,6 @@ function showPlayButton(color) {
         $('#play-button-' + color).on('click', function () {
             onClickPlayButton(color);
         });
-        keyValidity.turn = true;
     } else if (playerType[color] === 'automatic') {
         setTimeout(function () {
             onClickPlayButton(color);
@@ -614,8 +354,6 @@ function removePlayButton() {
 }
 
 function onClickPlayButton(color) {
-    ongoingGame = true;
-    keyValidity.turn = false;
     removePlayButton();
     const diceN = showDice(color);
     currentDiceN = diceN;
@@ -638,28 +376,7 @@ function onClickPlayButton(color) {
             return onClickToken(validTokens[0].color, validTokens[0].n, diceN);
         }
 
-        if (defaultPlayDeadTokenForSix[color] && diceN === 6) {
-            const deadTokens = validTokens.filter(t => Token.tracker[t.color][t.n].pos === -1);
-            if (deadTokens.length > 0) {
-                return onClickToken(deadTokens[0].color, deadTokens[0].n, diceN);
-            }
-        }
-
-        if (defaultPlayOutsideToken[color]) {
-            if (diceN !== 6 || !validTokens
-                .find(t => Token.tracker[t.color][t.n].pos === -1)) {
-                const outsideTokens = getOutsideTokens(validTokens);
-                if (outsideTokens && outsideTokens.length > 0) {
-                    if (outsideTokens.length === 1 || allAreTogether(outsideTokens)) {
-                        return onClickToken(outsideTokens[0].color, outsideTokens[0].n, diceN);
-                    }
-                }
-            }
-        }
-
-        if (playerType[color] === 'manual') {
-            keyValidity.select = true;
-        } else if (playerType[color] === 'automatic') {
+        if (playerType[color] === 'automatic') {
             return playAutomatically(color, diceN, validTokens);
         }
 
@@ -966,9 +683,6 @@ function makeValidTokensClickable(diceN) {
 function onClickToken(color, n, diceN) {
     activities.push(color + '-' + n + ' token selected for progress');
     onMouseoutToken(color, n, diceN);
-    selectedTokenI = undefined;
-    keyValidity.select = false;
-    keyValidity.go = false;
     playAudio('audio-token-move');
     $('.estimate').removeClass('estimate');
     $('.lastplayed').removeClass('lastplayed');
@@ -1075,10 +789,7 @@ function drawCells() {
     cellHTML += '</table>';
     $('#main').append(cellHTML);
 
-    drawSettingsButton(16, 0);
     drawSoundButton(15, 0);
-    drawNPlayerButton(14, 0);
-    drawPlayPauseButton(13, 0);
 }
 
 function styleCells() {
@@ -1425,7 +1136,7 @@ function Token(color, n) {
         }
     };
 }
-Token.tracker = {
+Token.tracker = { // dynamic
     red: {
         1: {
             ix: 2,
@@ -1531,6 +1242,14 @@ Token.tracker = {
         }
     }
 };
+
+// function updateTokenTracker(updateObj) {
+//     for (let color in colors) {
+//         for (let n = 1; n <= 4; n++) {
+//             Token.tracker[color][n].pos = updateObj[color][n].pos;
+//         }
+//     }
+// }
 
 function isFinished(color) {
     let point = 0;
