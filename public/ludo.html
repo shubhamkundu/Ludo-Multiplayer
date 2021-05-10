@@ -1,0 +1,40 @@
+<html>
+
+<head>
+    <title>Ludo</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="icon" href="image/ludo-dice.png">
+    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/css/bootstrap.min.css"
+        integrity="sha384-BVYiiSIFeK1dGmJRAkycuHAHRg32OmUcww7on3RYdg4Va+PmSTsz/K68vbdEjh4u" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.7.0/css/font-awesome.min.css">
+    <link rel="stylesheet" href="css/ludo.css">
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.4.1/jquery.min.js"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/js/bootstrap.min.js"
+        integrity="sha384-Tc5IQib027qvyjSMfHjOMaLkfuWVxZxUPnCJA7l2mCWNIpG9mGCD8wGNIcPD7Txa"
+        crossorigin="anonymous"></script>
+    <script src='https://kit.fontawesome.com/a076d05399.js'></script>
+    <script src="js/ludo.js"></script>
+</head>
+
+<body onload="onLoad()" onkeypress="onKeyPress(event)">
+    <div id="main">
+
+    </div>
+    <audio id="audio-dice-move">
+        <source src="audio/dice-move.mp3" type="audio/mpeg">
+    </audio>
+    <audio id="audio-token-move">
+        <source src="audio/token-move.mp3" type="audio/mpeg">
+    </audio>
+    <audio id="audio-token-eliminate">
+        <source src="audio/token-eliminate.mp3" type="audio/mpeg">
+    </audio>
+    <audio id="audio-token-home">
+        <source src="audio/token-home.mp3" type="audio/mpeg">
+    </audio>
+    <audio id="audio-win">
+        <source src="audio/win.mp3" type="audio/mpeg">
+    </audio>
+</body>
+
+</html>
