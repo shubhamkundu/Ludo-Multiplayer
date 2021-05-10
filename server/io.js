@@ -56,11 +56,10 @@ module.exports = (io) => {
             //     text: `${joinData.name} joined.`
             // });
 
-            socket.on('clickCellS', (data, done, fail) => {
-                console.log(`clickCellS with ${JSON.stringify(data)}`);
-
+            socket.on('clickPlayButtonS', (data, done, fail) => {
+                console.log(`clickPlayButtonS with ${JSON.stringify(data)}`);
                 try {
-                    io.to(joinData.room).emit('clickCell', data);
+                    io.broadcast.to(joinData.room).emit('clickPlayButton', data);
                     if (done) {
                         done();
                     }
@@ -73,9 +72,8 @@ module.exports = (io) => {
 
             socket.on('clickTokenS', (data, done, fail) => {
                 console.log(`clickTokenS with ${JSON.stringify(data)}`);
-
                 try {
-                    io.to(joinData.room).emit('clickToken', data);
+                    io.broadcast.to(joinData.room).emit('clickToken', data);
                     if (done) {
                         done();
                     }
@@ -86,11 +84,10 @@ module.exports = (io) => {
                 }
             });
 
-            socket.on('setActiveTeamS', (data, done, fail) => {
-                console.log(`setActiveTeamS with ${JSON.stringify(data)}`);
-
+            socket.on('setPlayerTypeS', (data, done, fail) => {
+                console.log(`setPlayerTypeS with ${JSON.stringify(data)}`);
                 try {
-                    io.to(joinData.room).emit('setActiveTeam', data);
+                    io.broadcast.to(joinData.room).emit('setPlayerType', data);
                     if (done) {
                         done();
                     }

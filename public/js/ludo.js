@@ -1,4 +1,12 @@
 // static variables - start
+const numberMapping = {
+    1: 'one',
+    2: 'two',
+    3: 'three',
+    4: 'four',
+    5: 'five',
+    6: 'six'
+};
 const colors = ['red', 'blue', 'yellow', 'green'];
 const colorMappingObj = {
     'red': {
@@ -18,28 +26,6 @@ const colorMappingObj = {
         g: 255,
         b: 0
     }
-};
-const keys = {
-    red: {
-        turn: 'q',
-        select: 'w',
-        go: 'e'
-    },
-    blue: {
-        turn: 'p',
-        select: 'o',
-        go: 'i'
-    },
-    yellow: {
-        turn: 'm',
-        select: 'n',
-        go: 'b'
-    },
-    green: {
-        turn: 'z',
-        select: 'x',
-        go: 'c'
-    },
 };
 const roomCellsForLiveTokens = {
     red: {
@@ -66,14 +52,6 @@ const roomCellsForLiveTokens = {
         yellow: [{ x: 2, y: 15 }, { x: 3, y: 15 }, { x: 4, y: 15 }, { x: 5, y: 15 }],
         green: [{ x: 6, y: 14 }, { x: 6, y: 13 }, { x: 6, y: 12 }, { x: 6, y: 11 }]
     }
-};
-const numberMapping = {
-    1: 'one',
-    2: 'two',
-    3: 'three',
-    4: 'four',
-    5: 'five',
-    6: 'six'
 };
 const cells = {
     'red': [2, 3, 4, 5, 6].map(x => { return { x, y: 7 }; })
@@ -119,7 +97,7 @@ const steps = {
 };
 // static variables - end
 
-let currentPlayerColor, currentDiceN, justEliminated, validTokensLength, thisTeam,
+let currentPlayerColor, justEliminated, validTokensLength, thisTeam,
     activeColors, winnerColors;
 
 // for settings
@@ -141,24 +119,39 @@ socket.on('connect', function () {
         alert(e.message);
     });
 
-    socket.on('clickCell', function (data) {
-        onClickCell(data);
+    socket.on('clickPlayButton', function (data) {
+        onClickPlayButton(data);
     });
     socket.on('clickToken', function (data) {
         onClickToken(data);
     });
-    socket.on('setActiveTeam', function (data) {
-        setActiveTeam(data);
-    });
     socket.on('setThisTeam', function (data) {
         setThisTeam(data);
+    });
+    socket.on('setPlayerType', function (data) {
+        setPlayerType(data);
     });
 });
 
 // functions - start
 
+function emit(eventName, data) {
+    socket.emit(eventName + 'S', data);
+}
+
 function setThisTeam(data) {
     thisTeam = data.thisTeam;
+    const data1 = { color: data.thisTeam, playerType: 'manual' };
+    setPlayerType(data1);
+    emit('setPlayerType', data1);
+    onLoad();
+}
+
+function setPlayerType(data) {
+    if (!playerType) {
+        playerType = {};
+    }
+    playerType[data.color] = data.playerType;
 }
 
 function reset() {
@@ -168,12 +161,14 @@ function reset() {
     validTokensLength = 0;
     soundStatus = 'on';
     gameEnded = false;
-    playerType = {
-        red: 'manual',
-        blue: 'automatic',
-        yellow: 'automatic',
-        green: 'automatic'
-    };
+    if (!playerType) {
+        playerType = {};
+    }
+    for (const color of colors) {
+        if (!playerType[color]) {
+            playerType[color] = 'automatic';
+        }
+    }
     activities = [];
 
     drawCells();
@@ -340,11 +335,17 @@ function showPlayButton(color) {
     });
     if (playerType[color] === 'manual') {
         $('#play-button-' + color).on('click', function () {
-            onClickPlayButton(color);
+            const diceN = Math.floor(Math.random() * 6 + 1);
+            const data = { color, diceN };
+            onClickPlayButton(data);
+            emit('clickPlayButton', data);
         });
     } else if (playerType[color] === 'automatic') {
         setTimeout(function () {
-            onClickPlayButton(color);
+            const diceN = Math.floor(Math.random() * 6 + 1);
+            const data = { color, diceN };
+            onClickPlayButton(data);
+            emit('clickPlayButton', data);
         }, 1000);
     }
 }
@@ -353,31 +354,33 @@ function removePlayButton() {
     $('#play-button-' + currentPlayerColor).remove();
 }
 
-function onClickPlayButton(color) {
+function onClickPlayButton(data) {
     removePlayButton();
-    const diceN = showDice(color);
-    currentDiceN = diceN;
+    const diceN = showDice(data.color, data.diceN);
     removeDice('center');
     showDice('center', diceN);
     const validTokens = makeValidTokensClickable(diceN);
     validTokensLength = validTokens.length;
 
     let timeOutMS;
-    if (playerType[color] === 'manual') {
+    if (playerType[data.color] === 'manual') {
         timeOutMS = 0;
-    } else if (playerType[color] === 'automatic') {
+    } else if (playerType[data.color] === 'automatic') {
         timeOutMS = 1000;
     }
 
     setTimeout(function () {
         if (validTokens.length === 0) {
-            return passToNext(color);
+            return passToNext(data.color);
         } else if (validTokens.length === 1 || allAreTogether(validTokens)) {
-            return onClickToken(validTokens[0].color, validTokens[0].n, diceN);
+            const data = { color: validTokens[0].color, n: validTokens[0].n, diceN };
+            onClickToken(data);
+            emit('clickToken', data);
+            return;
         }
 
-        if (playerType[color] === 'automatic') {
-            return playAutomatically(color, diceN, validTokens);
+        if (playerType[data.color] === 'automatic') {
+            return playAutomatically(data.color, diceN, validTokens);
         }
 
     }, timeOutMS);
@@ -385,7 +388,6 @@ function onClickPlayButton(color) {
 
 function playAutomatically(color, diceN, validTokens) {
     console.log(JSON.stringify(validTokens));
-    // return onClickToken(validTokens[0].color, validTokens[0].n, diceN);
 
     for (let i = 0; i < validTokens.length; i++) {
         const vt = validTokens[i];
@@ -429,7 +431,10 @@ function playAutomatically(color, diceN, validTokens) {
     if (validTokens[1]) { console.log(JSON.stringify(validTokens[1].w)); console.log(validTokens[1].wTotal) };
     if (validTokens[2]) { console.log(JSON.stringify(validTokens[2].w)); console.log(validTokens[2].wTotal) };
     if (validTokens[3]) { console.log(JSON.stringify(validTokens[3].w)); console.log(validTokens[3].wTotal) };
-    return onClickToken(validTokens[0].color, validTokens[0].n, diceN);
+    const data = { color: validTokens[0].color, n: validTokens[0].n, diceN };
+    onClickToken(data);
+    emit('clickToken', data);
+    return;
 }
 
 function calculatePositionWeightage(vt) {
@@ -667,7 +672,9 @@ function makeValidTokensClickable(diceN) {
             validTokens.push(currentTokenTrackingObj.ref);
             $('#token-' + currentPlayerColor + '-' + (i + 1)).addClass('clickable');
             $('#token-' + currentPlayerColor + '-' + (i + 1)).on('click', function () {
-                onClickToken(currentPlayerColor, i + 1, diceN);
+                const data = { color: currentPlayerColor, n: i + 1, diceN };
+                onClickToken(data);
+                emit('clickToken', data);
             });
             $('#token-' + currentPlayerColor + '-' + (i + 1)).on('mouseover', function () {
                 onMouseoverToken(currentPlayerColor, i + 1, diceN);
@@ -680,7 +687,10 @@ function makeValidTokensClickable(diceN) {
     return validTokens;
 }
 
-function onClickToken(color, n, diceN) {
+function onClickToken(data) {
+    const color = data.color;
+    const n = data.n;
+    const diceN = data.diceN;
     activities.push(color + '-' + n + ' token selected for progress');
     onMouseoutToken(color, n, diceN);
     playAudio('audio-token-move');
