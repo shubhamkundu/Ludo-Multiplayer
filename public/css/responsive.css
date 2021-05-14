@@ -63,12 +63,12 @@ table {
 }
 
 .dice {
-    font-size: min(3.5vw, 3.5vh);
+    font-size: min(5.6vw, 5.6vh);
     text-align: center;
 }
 
 .play-button {
-    font-size: min(3.5vw, 3.5vh);
+    font-size: min(5.6vw, 5.6vh);
     text-align: center;
     cursor: pointer;
 }
