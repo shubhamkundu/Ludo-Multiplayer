@@ -8,6 +8,10 @@ table {
     border: 1px solid black;
     width: min(5.9vw, 5.9vh);
     height: min(5.9vw, 5.9vh);
+    max-width: min(5.9vw, 5.9vh);
+    font-weight: 600;
+    font-size: 1.3em;
+
 }
 
 .token {
@@ -59,12 +63,12 @@ table {
 }
 
 .dice {
-    font-size: min(5.6vw, 5.6vh);
+    font-size: min(3.5vw, 3.5vh);
     text-align: center;
 }
 
 .play-button {
-    font-size: min(5.6vw, 5.6vh);
+    font-size: min(3.5vw, 3.5vh);
     text-align: center;
     cursor: pointer;
 }

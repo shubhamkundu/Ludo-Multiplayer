@@ -45,7 +45,7 @@ module.exports = (io) => {
             const thisUser = users.addUser(socket.id, joinData.name, joinData.room);
             io.to(joinData.room).emit('updateUsers', users.list.filter(u => u.room === joinData.room));
 
-            socket.emit('setThisTeam', { thisTeam: thisUser.team });
+            socket.emit('setThisTeam', { thisTeam: thisUser.team, users: [...users.list.filter(u => u.room === joinData.room)] });
 
             // socket.emit('receiveMessage', {
             //     type: 'system',
@@ -58,8 +58,9 @@ module.exports = (io) => {
 
             socket.on('clickPlayButtonS', (data, done, fail) => {
                 console.log(`clickPlayButtonS with ${JSON.stringify(data)}`);
+                data.thisUser = thisUser;
                 try {
-                    io.broadcast.to(joinData.room).emit('clickPlayButton', data);
+                    socket.broadcast.to(joinData.room).emit('clickPlayButton', data);
                     if (done) {
                         done();
                     }
@@ -73,7 +74,7 @@ module.exports = (io) => {
             socket.on('clickTokenS', (data, done, fail) => {
                 console.log(`clickTokenS with ${JSON.stringify(data)}`);
                 try {
-                    io.broadcast.to(joinData.room).emit('clickToken', data);
+                    socket.broadcast.to(joinData.room).emit('clickToken', data);
                     if (done) {
                         done();
                     }
@@ -87,7 +88,37 @@ module.exports = (io) => {
             socket.on('setPlayerTypeS', (data, done, fail) => {
                 console.log(`setPlayerTypeS with ${JSON.stringify(data)}`);
                 try {
-                    io.broadcast.to(joinData.room).emit('setPlayerType', data);
+                    socket.broadcast.to(joinData.room).emit('setPlayerType', data);
+                    if (done) {
+                        done();
+                    }
+                } catch (e) {
+                    if (fail) {
+                        fail(e);
+                    }
+                }
+            });
+
+            socket.on('setUsersS', (data, done, fail) => {
+                console.log(`setUsersS with ${JSON.stringify(data)}`);
+                try {
+                    socket.broadcast.to(joinData.room).emit('setUsers', data);
+                    console.log('emitted setUsers');
+                    if (done) {
+                        done();
+                    }
+                } catch (e) {
+                    console.log('setUsers error', e);
+                    if (fail) {
+                        fail(e);
+                    }
+                }
+            });
+
+            socket.on('displayNamesS', (data, done, fail) => {
+                console.log(`displayNamesS with ${JSON.stringify(data)}`);
+                try {
+                    socket.broadcast.to(joinData.room).emit('displayNames');
                     if (done) {
                         done();
                     }
@@ -100,10 +131,9 @@ module.exports = (io) => {
         });
 
         socket.on('disconnect', () => {
-            console.log(`${socket.id} left!!!!!!!!!!!!!!!!!!!!!!`);
             const user = users.removeUser(socket.id);
             if (_.isString(user)) {
-                console.log(user);
+                console.log(`${user} left!!!!!!!!!!!!!!!!!!!!!!`);
                 return;
             }
             io.to(user.room).emit('updateUsers', users.list.filter(u => u.room === user.room));

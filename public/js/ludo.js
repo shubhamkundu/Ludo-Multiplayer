@@ -97,7 +97,7 @@ const steps = {
 };
 // static variables - end
 
-let currentPlayerColor, justEliminated, validTokensLength, thisTeam,
+let currentPlayerColor, justEliminated, validTokensLength, thisTeam, users,
     activeColors, winnerColors;
 
 // for settings
@@ -131,6 +131,12 @@ socket.on('connect', function () {
     socket.on('setPlayerType', function (data) {
         setPlayerType(data);
     });
+    socket.on('setUsers', function (data) {
+        setUsers(data);
+    });
+    socket.on('displayNames', function () {
+        displayNames();
+    });
 });
 
 // functions - start
@@ -141,17 +147,63 @@ function emit(eventName, data) {
 
 function setThisTeam(data) {
     thisTeam = data.thisTeam;
-    const data1 = { color: data.thisTeam, playerType: 'manual' };
-    setPlayerType(data1);
+    const data1 = { color: data.thisTeam, users: data.users };
     emit('setPlayerType', data1);
+    setPlayerType(data1);
+    emit('setUsers', data1);
+    setUsers(data1);
     onLoad();
+}
+
+function setUsers(data) {
+    users = data.users;
+    displayNames();
+}
+
+function displayNames() {
+    const positions = {
+        red: {
+            fname: { x: 2, y: 3 },
+            lname: { x: 2, y: 4 }
+        },
+        blue: {
+            fname: { x: 11, y: 3 },
+            lname: { x: 11, y: 4 }
+        },
+        yellow: {
+            fname: { x: 11, y: 12 },
+            lname: { x: 11, y: 13 }
+        },
+        green: {
+            fname: { x: 2, y: 12 },
+            lname: { x: 2, y: 13 }
+        }
+    };
+    for (const user of users) {
+        const usernameArr = user.name.split(' ');
+        const fname = usernameArr[0];
+        const lname = usernameArr[1];
+        const fnameCellId = `cell-${positions[user.team].fname.y}-${positions[user.team].fname.x}`;
+        const lnameCellId = `cell-${positions[user.team].lname.y}-${positions[user.team].lname.x}`;
+        $(`#${fnameCellId}`).text(fname);
+        $(`#${lnameCellId}`).text(lname);
+        $(`#cell-0-1`).html(fname + '_' + lname);
+    }
+}
+
+function setTeamColor() {
+    $('td.teamColor').css({
+        background: thisTeam
+    });
 }
 
 function setPlayerType(data) {
     if (!playerType) {
         playerType = {};
     }
-    playerType[data.color] = data.playerType;
+    for (let user of data.users) {
+        playerType[user.team] = 'manual';
+    }
 }
 
 function reset() {
@@ -334,19 +386,31 @@ function showPlayButton(color) {
         color: color
     });
     if (playerType[color] === 'manual') {
-        $('#play-button-' + color).on('click', function () {
-            const diceN = Math.floor(Math.random() * 6 + 1);
-            const data = { color, diceN };
-            onClickPlayButton(data);
-            emit('clickPlayButton', data);
-        });
+        if (currentPlayerColor === thisTeam) {
+            $('#play-button-' + color).on('click', function () {
+                const diceN = Math.floor(Math.random() * 6 + 1);
+                const data = { color, diceN };
+                emit('clickPlayButton', data);
+                onClickPlayButton(data);
+            });
+        }
     } else if (playerType[color] === 'automatic') {
-        setTimeout(function () {
-            const diceN = Math.floor(Math.random() * 6 + 1);
-            const data = { color, diceN };
-            onClickPlayButton(data);
-            emit('clickPlayButton', data);
-        }, 1000);
+        const startIndex = colors.indexOf(thisTeam);
+        const endIndex = colors.indexOf(color);
+        let shouldContinue = true;
+        for (let i = startIndex + 1; i <= endIndex - 1; i++) {
+            if (playerType[colors[i]] === 'manual') {
+                shouldContinue = false;
+            }
+        }
+        if (shouldContinue) {
+            setTimeout(function () {
+                const diceN = Math.floor(Math.random() * 6 + 1);
+                const data = { color, diceN };
+                emit('clickPlayButton', data);
+                onClickPlayButton(data);
+            }, 1000);
+        }
     }
 }
 
@@ -375,7 +439,6 @@ function onClickPlayButton(data) {
         } else if (validTokens.length === 1 || allAreTogether(validTokens)) {
             const data = { color: validTokens[0].color, n: validTokens[0].n, diceN };
             onClickToken(data);
-            emit('clickToken', data);
             return;
         }
 
@@ -433,7 +496,6 @@ function playAutomatically(color, diceN, validTokens) {
     if (validTokens[3]) { console.log(JSON.stringify(validTokens[3].w)); console.log(validTokens[3].wTotal) };
     const data = { color: validTokens[0].color, n: validTokens[0].n, diceN };
     onClickToken(data);
-    emit('clickToken', data);
     return;
 }
 
@@ -672,9 +734,11 @@ function makeValidTokensClickable(diceN) {
             validTokens.push(currentTokenTrackingObj.ref);
             $('#token-' + currentPlayerColor + '-' + (i + 1)).addClass('clickable');
             $('#token-' + currentPlayerColor + '-' + (i + 1)).on('click', function () {
-                const data = { color: currentPlayerColor, n: i + 1, diceN };
-                onClickToken(data);
-                emit('clickToken', data);
+                if (currentPlayerColor === thisTeam) {
+                    const data = { color: currentPlayerColor, n: i + 1, diceN };
+                    emit('clickToken', data);
+                    onClickToken(data);
+                }
             });
             $('#token-' + currentPlayerColor + '-' + (i + 1)).on('mouseover', function () {
                 onMouseoverToken(currentPlayerColor, i + 1, diceN);
@@ -789,7 +853,11 @@ function drawCells() {
         cellHTML += '<tr class="row" id="row-' + i + '">';
         if (i !== 16) {
             for (let j = 0; j < 17; j++) {
-                cellHTML += '<td class="cell" id="cell-' + i + '-' + j + '"></td>';
+                cellHTML += '<td class="cell';
+                if ((j === 0 || j === 16 && 1 <= i <= 15) || i === 0) {
+                    cellHTML += ' teamColor';
+                }
+                cellHTML += '" id="cell-' + i + '-' + j + '"></td>';
             }
         } else {
             cellHTML += '<td colspan="17" class="cell bottom" id="cell-' + i + '"></td>';
@@ -798,6 +866,8 @@ function drawCells() {
     }
     cellHTML += '</table>';
     $('#main').append(cellHTML);
+    displayNames();
+    setTeamColor();
 
     drawSoundButton(15, 0);
 }
@@ -811,29 +881,29 @@ function styleCells() {
                 $('#cell-' + i + '-' + j).css({
                     'border-right': 'none',
                     'border-bottom': 'none',
-                    'background': 'orange'
+                    // 'background': 'orange'
                 });
             } else if (i === 0 && j === n - 1) {
                 $('#cell-' + i + '-' + j).css({
                     'border-left': 'none',
                     'border-bottom': 'none',
-                    'background': 'orange'
+                    // 'background': 'orange'
                 });
             } else if (i === n - 1) {
                 $('#cell-' + i).css({
-                    'background': 'orange'
+                    // 'background': 'orange'
                 });
             } else if (i > 0 && i < n - 1 && (j === 0 || j === n - 1)) {
                 $('#cell-' + i + '-' + j).css({
                     'border-top': 'none',
                     'border-bottom': 'none',
-                    'background': 'orange'
+                    // 'background': 'orange'
                 });
             } else if (j > 0 && j < n - 1 && i === 0) {
                 $('#cell-' + i + '-' + j).css({
                     'border-left': 'none',
                     'border-right': 'none',
-                    'background': 'orange'
+                    // 'background': 'orange'
                 });
             }
             // style red base
@@ -968,7 +1038,6 @@ function Token(color, n) {
             star.ref.hide();
         }
         $('#cell-' + y + '-' + x).append(tokenHTML);
-        // $('#cell-' + y + '-' + x).addClass('token');
         $('#token-' + this.color + '-' + this.n).css({
             'background': this.color,
             'background-image': 'linear-gradient(' + this.color + ', white, ' + this.color
@@ -984,9 +1053,6 @@ function Token(color, n) {
     };
     this.erase = function () {
         $('#token-' + this.color + '-' + this.n).remove();
-        // if (Token.tracker[this.color] && Token.tracker[this.color][this.n]) {
-        // delete Token.tracker[this.color][this.n];
-        // }
     };
     this.drawEstimate = function (x, y) {
         const estimateHTML = '<div class="estimate ' + this.color + ' ' + this.n + '" id="estimate-' + this.color + '-' + this.n + '"></div>';
@@ -994,19 +1060,6 @@ function Token(color, n) {
     };
     this.eraseEstimate = function (x, y) {
         $('#estimate-' + this.color + '-' + this.n).remove();
-    };
-    this.move = function (moveX, moveY) {
-        if (!moveY) {
-            moveY = 0;
-        }
-        const currentX = Token.tracker[this.color][this.n].x;
-        const currentY = Token.tracker[this.color][this.n].y;
-        const star = isStar(currentX, currentY);
-        if (star) {
-            star.ref.show();
-        }
-        this.erase();
-        this.draw(currentX + moveX, currentY + moveY);
     };
     this.progress = function (n) {
         if (Token.tracker[this.color][this.n].pos === undefined) {
