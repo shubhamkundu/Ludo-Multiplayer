@@ -1,4 +1,12 @@
 // static variables - start
+const numberMapping = {
+    1: 'one',
+    2: 'two',
+    3: 'three',
+    4: 'four',
+    5: 'five',
+    6: 'six'
+};
 const colors = ['red', 'blue', 'yellow', 'green'];
 const colorMappingObj = {
     'red': {
@@ -18,33 +26,6 @@ const colorMappingObj = {
         g: 255,
         b: 0
     }
-};
-const keys = {
-    red: {
-        turn: 'q',
-        select: 'w',
-        go: 'e'
-    },
-    blue: {
-        turn: 'p',
-        select: 'o',
-        go: 'i'
-    },
-    yellow: {
-        turn: 'm',
-        select: 'n',
-        go: 'b'
-    },
-    green: {
-        turn: 'z',
-        select: 'x',
-        go: 'c'
-    },
-};
-const titleMapping = {
-    defaultPlayDeadTokenForSix: 'Default play dead token for six:',
-    defaultPlayOutsideToken: 'Default play outside token:',
-    playerType: 'Player Type:'
 };
 const roomCellsForLiveTokens = {
     red: {
@@ -71,14 +52,6 @@ const roomCellsForLiveTokens = {
         yellow: [{ x: 2, y: 15 }, { x: 3, y: 15 }, { x: 4, y: 15 }, { x: 5, y: 15 }],
         green: [{ x: 6, y: 14 }, { x: 6, y: 13 }, { x: 6, y: 12 }, { x: 6, y: 11 }]
     }
-};
-const numberMapping = {
-    1: 'one',
-    2: 'two',
-    3: 'three',
-    4: 'four',
-    5: 'five',
-    6: 'six'
 };
 const cells = {
     'red': [2, 3, 4, 5, 6].map(x => { return { x, y: 7 }; })
@@ -124,57 +97,133 @@ const steps = {
 };
 // static variables - end
 
-let currentPlayerColor, currentDiceN, justEliminated, validTokensLength, activeColors, winnerColors;
+let currentPlayerColor, justEliminated, validTokensLength, thisTeam, users,
+    activeColors, winnerColors;
 
 // for settings
-let nPlayer, settingsOpen, soundStatus, ongoingGame, gameEnded,
-    defaultPlayDeadTokenForSix, defaultPlayOutsideToken, playerType, paused;
+let soundStatus, gameEnded, playerType;
 
 // for log
 let activities;
 
-// for keypress game
-let currentSelectedTokenN, selectedTokenI;
-const keyValidity = {
-    turn: false,
-    select: false,
-    go: false
-};
+const socket = io();
+socket.on('connect', function () {
+    console.log('User connected to client');
+    var params = jQuery.deparam(window.location.search);
+
+    socket.emit('join', {
+        name: params.name,
+        room: params.room
+    }, function (e) {
+        window.location.href = '/';
+        alert(e.message);
+    });
+
+    socket.on('clickPlayButton', function (data) {
+        onClickPlayButton(data);
+    });
+    socket.on('clickToken', function (data) {
+        onClickToken(data);
+    });
+    socket.on('setThisTeam', function (data) {
+        setThisTeam(data);
+    });
+    socket.on('setPlayerType', function (data) {
+        setPlayerType(data);
+    });
+    socket.on('setUsers', function (data) {
+        setUsers(data);
+    });
+    socket.on('displayNames', function () {
+        displayNames();
+    });
+});
 
 // functions - start
 
+function emit(eventName, data) {
+    socket.emit(eventName + 'S', data);
+}
+
+function setThisTeam(data) {
+    thisTeam = data.thisTeam;
+    const data1 = { color: data.thisTeam, users: data.users };
+    emit('setPlayerType', data1);
+    setPlayerType(data1);
+    emit('setUsers', data1);
+    setUsers(data1);
+    onLoad();
+}
+
+function setUsers(data) {
+    users = data.users;
+    displayNames();
+}
+
+function displayNames() {
+    const positions = {
+        red: {
+            fname: { x: 2, y: 3 },
+            lname: { x: 2, y: 4 }
+        },
+        blue: {
+            fname: { x: 11, y: 3 },
+            lname: { x: 11, y: 4 }
+        },
+        yellow: {
+            fname: { x: 11, y: 12 },
+            lname: { x: 11, y: 13 }
+        },
+        green: {
+            fname: { x: 2, y: 12 },
+            lname: { x: 2, y: 13 }
+        }
+    };
+    for (const user of users) {
+        const usernameArr = user.name.split(' ');
+        const fname = usernameArr[0];
+        const lname = usernameArr[1];
+        const fnameCellId = `cell-${positions[user.team].fname.y}-${positions[user.team].fname.x}`;
+        const lnameCellId = `cell-${positions[user.team].lname.y}-${positions[user.team].lname.x}`;
+        $(`#${fnameCellId}`).text(fname);
+        $(`#${lnameCellId}`).text(lname);
+        $(`#cell-0-1`).html(fname + '_' + lname);
+    }
+}
+
+function setTeamColor() {
+    $('td.teamColor').css({
+        background: thisTeam
+    });
+}
+
+function setPlayerType(data) {
+    if (!playerType) {
+        playerType = {};
+    }
+    for (let user of data.users) {
+        playerType[user.team] = 'manual';
+    }
+}
+
 function reset() {
-    nPlayer = parseInt(sessionStorage.getItem('nPlayer'));
-    sessionStorage.removeItem('nPlayer');
-    if (isNaN(nPlayer)) {
-        nPlayer = 4;
-    }
-    if (nPlayer === 4) {
-        activeColors = ['red', 'blue', 'yellow', 'green'];
-    } else {
-        activeColors = ['red', 'yellow'];
-    }
+    activeColors = ['red', 'blue', 'yellow', 'green'];
     winnerColors = [];
     justEliminated = false;
     validTokensLength = 0;
-    settingsOpen = false;
     soundStatus = 'on';
-    ongoingGame = false;
     gameEnded = false;
-    defaultPlayDeadTokenForSix = {};
-    defaultPlayOutsideToken = {};
-    playerType = {
-        red: 'manual',
-        blue: 'automatic',
-        yellow: 'automatic',
-        green: 'automatic'
-    };
-    paused = false;
+    if (!playerType) {
+        playerType = {};
+    }
+    for (const color of colors) {
+        if (!playerType[color]) {
+            playerType[color] = 'automatic';
+        }
+    }
     activities = [];
 
     drawCells();
-    drawSettings();
-    hideElementById('table-settings');
     styleCells();
     initializeStars();
     drawTokens('initial');
@@ -190,14 +239,6 @@ function removeFromArr(arr, el) {
 function onLoad() {
     reset();
     startGame();
-}
-
-function drawSettingsButton(x, y) {
-    const settingsButtonHTML = '<i id="settings-button" class="fas fa-cog"></i>';
-    $('#cell-' + y + '-' + x).append(settingsButtonHTML);
-    $('#cell-' + y + '-' + x).on('click', function () {
-        openSettings();
-    });
 }
 
 function drawSoundButton(x, y) {
@@ -230,92 +271,17 @@ function setSoundStatus(status) {
     }
 }
 
-function drawNPlayerButton(x, y) {
-    const fourPlayerButtonHTML = '<i id="i-4-player" class="fas fa-users" title="Change to 2-player mode."></i>';
-    $('#cell-' + y + '-' + x).append(fourPlayerButtonHTML);
-    const twoPlayerButtonHTML = '<i id="i-2-player" class="fas fa-user-friends"></i>';
-    $('#cell-' + y + '-' + x).append(twoPlayerButtonHTML);
-    $('#cell-' + y + '-' + x).on('click', function () {
-        toggleNPlayer();
-    });
-    setNPlayer(nPlayer);
-}
-
-function toggleNPlayer() {
-    const confirmMsg = 'You need to Restart Game. Continue?';
-    if (!ongoingGame || confirm(confirmMsg)) {
-        if (nPlayer === 4) {
-            setNPlayer(2);
-        } else {
-            setNPlayer(4);
-        }
-        location.reload();
-    }
-}
-
-function setNPlayer(n) {
-    nPlayer = n;
-    sessionStorage.setItem('nPlayer', n);
-    if (nPlayer === 4) {
-        hideElementById('i-2-player');
-        showElementById('i-4-player');
-    } else if (nPlayer === 2) {
-        hideElementById('i-4-player');
-        showElementById('i-2-player');
-    }
-}
-
-function drawPlayPauseButton(x, y) {
-    const pauseButtonHTML = '<i id="i-pause" class="fas fa-pause"></i>';
-    $('#cell-' + y + '-' + x).append(pauseButtonHTML);
-    const playButtonHTML = '<i id="i-play" class="fas fa-play"></i>';
-    $('#cell-' + y + '-' + x).append(playButtonHTML);
-    $('#cell-' + y + '-' + x).on('click', function () {
-        togglePlayPause();
-    });
-    setPaused(paused);
-}
-
-function togglePlayPause() {
-    if (paused === true) {
-        setPaused(false);
-    } else {
-        setPaused(true);
-        alert('Resume Game?');
-        setPaused(false);
-    }
-}
-
-function setPaused(status) {
-    paused = status;
-    if (paused === true) {
-        hideElementById('i-pause');
-        showElementById('i-play');
-    } else if (paused === false) {
-        hideElementById('i-play');
-        showElementById('i-pause');
-    }
-}
-
-function openSettings() {
-    settingsOpen = true;
-    hideElementById('table-board');
-    showElementById('table-settings');
-    lifeControls();
-}
-
-function drawBoardButton(x, y) {
-    const boardButtonHTML = '<i class="fas fa-chess-board"></i>';
-    $('#scell-' + y + '-' + x).append(boardButtonHTML);
-    $('#scell-' + y + '-' + x).on('click', function () {
-        closeSettings();
+function stopAllAudio() {
+    $('audio').each(function () {
+        $(this).trigger('load');
     });
 }
 
-function closeSettings() {
-    settingsOpen = false;
-    hideElementById('table-settings');
-    showElementById('table-board');
+function playAudio(id) {
+    if (soundStatus === 'on') {
+        stopAllAudio();
+        $('#' + id).trigger('play');
+    }
 }
 
 function hideElementById(id) {
@@ -324,166 +290,6 @@ function hideElementById(id) {
 
 function showElementById(id) {
     $('#' + id).show();
-}
-
-function drawSettings() {
-    let settingsHTML = '<table id="table-settings">';
-    for (let i = 0; i < 17; i++) {
-        settingsHTML += '<tr class="srow" id="srow-' + i + '">';
-        if (i === 0 || i === 16) {
-            for (let j = 0; j < 17; j++) {
-                settingsHTML += '<td class="scell" id="scell-' + i + '-' + j + '"></td>';
-            }
-        } else {
-            settingsHTML += '<td class="scell" id="scell-' + i + '-' + 0 + '"></td>';
-            settingsHTML += '<td colspan="7" class="scell middle" id="scell-' + i + '-' + 1 + '"></td>';
-            settingsHTML += '<td colspan="8" class="scell middle" id="scell-' + i + '-' + 2 + '"></td>';
-            settingsHTML += '<td class="scell" id="scell-' + i + '-' + 3 + '"></td>';
-        }
-        settingsHTML += '</tr>';
-    }
-    settingsHTML += '</table>';
-    $('#main').append(settingsHTML);
-    drawBoardButton(16, 0);
-    drawSpecificSettings(1, 'defaultPlayDeadTokenForSix');
-    drawSpecificSettings(2, 'defaultPlayOutsideToken');
-    drawSpecificSettings(3, 'playerType');
-}
-
-function drawSpecificSettings(y, type) {
-    drawTitle(y, type);
-    drawControls(y, type);
-    lifeControls(type);
-}
-
-function drawTitle(y, type) {
-    $('#scell-' + y + '-' + 1).text(titleMapping[type]);
-}
-
-function drawControls(y, type) {
-    let controlHTML = '';
-
-    if (type === 'defaultPlayDeadTokenForSix') {
-        controlHTML += '<input type="radio" id="defaultPlayDeadTokenForSix-on" name="defaultPlayDeadTokenForSix"> On';
-        controlHTML += '<input type="radio" id="defaultPlayDeadTokenForSix-off" name="defaultPlayDeadTokenForSix"> Off';
-    } else if (type === 'defaultPlayOutsideToken') {
-        controlHTML += '<input type="radio" id="defaultPlayOutsideToken-on" name="defaultPlayOutsideToken"> On';
-        controlHTML += '<input type="radio" id="defaultPlayOutsideToken-off" name="defaultPlayOutsideToken"> Off';
-    } else if (type === 'playerType') {
-        controlHTML += '<br>Red:<br>';
-        controlHTML += '<input type="radio" id="playerTypeRed-manual" name="playerTypeRed"> Manual<br>';
-        controlHTML += '<input type="radio" id="playerTypeRed-automatic" name="playerTypeRed"> Automatic<br>';
-        controlHTML += '<br>Blue:<br>';
-        controlHTML += '<input type="radio" id="playerTypeBlue-manual" name="playerTypeBlue"> Manual<br>';
-        controlHTML += '<input type="radio" id="playerTypeBlue-automatic" name="playerTypeBlue"> Automatic<br>';
-        controlHTML += '<br>Yellow:<br>';
-        controlHTML += '<input type="radio" id="playerTypeYellow-manual" name="playerTypeYellow"> Manual<br>';
-        controlHTML += '<input type="radio" id="playerTypeYellow-automatic" name="playerTypeYellow"> Automatic<br>';
-        controlHTML += '<br>Green:<br>';
-        controlHTML += '<input type="radio" id="playerTypeGreen-manual" name="playerTypeGreen"> Manual<br>';
-        controlHTML += '<input type="radio" id="playerTypeGreen-automatic" name="playerTypeGreen"> Automatic<br>';
-    }
-
-    $('#scell-' + y + '-' + 2).append(controlHTML);
-}
-
-function lifeControls(type) {
-    if (!type || type === 'defaultPlayDeadTokenForSix') {
-        $('#defaultPlayDeadTokenForSix-on').on('click', function () {
-            defaultPlayDeadTokenForSix[currentPlayerColor] = true;
-        });
-        $('#defaultPlayDeadTokenForSix-off').on('click', function () {
-            defaultPlayDeadTokenForSix[currentPlayerColor] = false;
-        });
-        if (defaultPlayDeadTokenForSix[currentPlayerColor] === true) {
-            $('#defaultPlayDeadTokenForSix-on').click();
-        } else {
-            $('#defaultPlayDeadTokenForSix-off').click();
-        }
-    }
-
-    if (!type || type === 'defaultPlayOutsideToken') {
-        $('#defaultPlayOutsideToken-on').on('click', function () {
-            defaultPlayOutsideToken[currentPlayerColor] = true;
-        });
-        $('#defaultPlayOutsideToken-off').on('click', function () {
-            defaultPlayOutsideToken[currentPlayerColor] = false;
-        });
-        if (defaultPlayOutsideToken[currentPlayerColor] === true) {
-            $('#defaultPlayOutsideToken-on').click();
-        } else {
-            $('#defaultPlayOutsideToken-off').click();
-        }
-    }
-
-    if (!type || type === 'playerType') {
-        $('#playerTypeRed-manual').on('click', function () {
-            playerType['red'] = 'manual';
-        });
-        $('#playerTypeRed-automatic').on('click', function () {
-            playerType['red'] = 'automatic';
-        });
-        if (playerType['red'] === 'manual') {
-            $('#playerTypeRed-manual').click();
-        } else if (playerType['red'] === 'automatic') {
-            $('#playerTypeRed-automatic').click();
-        }
-
-        $('#playerTypeBlue-manual').on('click', function () {
-            playerType['blue'] = 'manual';
-        });
-        $('#playerTypeBlue-automatic').on('click', function () {
-            playerType['blue'] = 'automatic';
-        });
-        if (playerType['blue'] === 'manual') {
-            $('#playerTypeBlue-manual').click();
-        } else if (playerType['blue'] === 'automatic') {
-            $('#playerTypeBlue-automatic').click();
-        }
-
-        $('#playerTypeYellow-manual').on('click', function () {
-            playerType['yellow'] = 'manual';
-        });
-        $('#playerTypeYellow-automatic').on('click', function () {
-            playerType['yellow'] = 'automatic';
-        });
-        if (playerType['yellow'] === 'manual') {
-            $('#playerTypeYellow-manual').click();
-        } else if (playerType['yellow'] === 'automatic') {
-            $('#playerTypeYellow-automatic').click();
-        }
-
-        $('#playerTypeGreen-manual').on('click', function () {
-            playerType['green'] = 'manual';
-        });
-        $('#playerTypeGreen-automatic').on('click', function () {
-            playerType['green'] = 'automatic';
-        });
-        if (playerType['green'] === 'manual') {
-            $('#playerTypeGreen-manual').click();
-        } else if (playerType['green'] === 'automatic') {
-            $('#playerTypeGreen-automatic').click();
-        }
-    }
-}
-
-function onKeyPress(ev) {
-    if (keys[currentPlayerColor]) {
-        if (ev.key === keys[currentPlayerColor].turn && keyValidity.turn) {
-            onClickPlayButton(currentPlayerColor);
-        } else if (ev.key === keys[currentPlayerColor].select && keyValidity.select) {
-            onMouseoutToken(currentPlayerColor);
-            selectedTokenI = selectedTokenI === validTokensLength - 1 || selectedTokenI === undefined ? 0 : selectedTokenI + 1;
-            const token = $('.clickable:nth(' + selectedTokenI + ')');
-            $('.selected').removeClass('selected');
-            token.addClass('selected');
-            currentSelectedTokenN = parseInt(token.attr('id').split('-')[2]);
-            onMouseoverToken(currentPlayerColor, currentSelectedTokenN, currentDiceN);
-            keyValidity.go = true;
-        } else if (ev.key === keys[currentPlayerColor].go && keyValidity.go) {
-            onClickToken(currentPlayerColor, currentSelectedTokenN, currentDiceN);
-        }
-    }
 }
 
 function startGame() {
@@ -500,11 +306,6 @@ function passTo(color) {
     justEliminated = false;
     currentPlayerColor = color;
     showPlayButton(currentPlayerColor);
-    if (playerType[color] === 'manual') {
-        showElementById('settings-button');
-    } else if (playerType[color] === 'automatic') {
-        hideElementById('settings-button');
-    }
 }
 
 function passToNext(color) {
@@ -535,19 +336,6 @@ function getDicePosition(color) {
             x: 7,
             y: 9
         };
-    }
-}
-
-function stopAllAudio() {
-    $('audio').each(function () {
-        $(this).trigger('load');
-    });
-}
-
-function playAudio(id) {
-    if (soundStatus === 'on') {
-        stopAllAudio();
-        $('#' + id).trigger('play');
     }
 }
 
@@ -598,14 +386,31 @@ function showPlayButton(color) {
         color: color
     });
     if (playerType[color] === 'manual') {
-        $('#play-button-' + color).on('click', function () {
-            onClickPlayButton(color);
-        });
-        keyValidity.turn = true;
+        if (currentPlayerColor === thisTeam) {
+            $('#play-button-' + color).on('click', function () {
+                const diceN = Math.floor(Math.random() * 6 + 1);
+                const data = { color, diceN };
+                emit('clickPlayButton', data);
+                onClickPlayButton(data);
+            });
+        }
     } else if (playerType[color] === 'automatic') {
-        setTimeout(function () {
-            onClickPlayButton(color);
-        }, 1000);
+        const startIndex = colors.indexOf(thisTeam);
+        const endIndex = colors.indexOf(color);
+        let shouldContinue = true;
+        for (let i = startIndex + 1; i <= endIndex - 1; i++) {
+            if (playerType[colors[i]] === 'manual') {
+                shouldContinue = false;
+            }
+        }
+        if (shouldContinue) {
+            setTimeout(function () {
+                const diceN = Math.floor(Math.random() * 6 + 1);
+                const data = { color, diceN };
+                emit('clickPlayButton', data);
+                onClickPlayButton(data);
+            }, 1000);
+        }
     }
 }
 
@@ -613,54 +418,32 @@ function removePlayButton() {
     $('#play-button-' + currentPlayerColor).remove();
 }
 
-function onClickPlayButton(color) {
-    ongoingGame = true;
-    keyValidity.turn = false;
+function onClickPlayButton(data) {
     removePlayButton();
-    const diceN = showDice(color);
-    currentDiceN = diceN;
+    const diceN = showDice(data.color, data.diceN);
     removeDice('center');
     showDice('center', diceN);
     const validTokens = makeValidTokensClickable(diceN);
     validTokensLength = validTokens.length;
 
     let timeOutMS;
-    if (playerType[color] === 'manual') {
+    if (playerType[data.color] === 'manual') {
         timeOutMS = 0;
-    } else if (playerType[color] === 'automatic') {
+    } else if (playerType[data.color] === 'automatic') {
         timeOutMS = 1000;
     }
 
     setTimeout(function () {
         if (validTokens.length === 0) {
-            return passToNext(color);
+            return passToNext(data.color);
         } else if (validTokens.length === 1 || allAreTogether(validTokens)) {
-            return onClickToken(validTokens[0].color, validTokens[0].n, diceN);
+            const data = { color: validTokens[0].color, n: validTokens[0].n, diceN };
+            onClickToken(data);
+            return;
         }
 
-        if (defaultPlayDeadTokenForSix[color] && diceN === 6) {
-            const deadTokens = validTokens.filter(t => Token.tracker[t.color][t.n].pos === -1);
-            if (deadTokens.length > 0) {
-                return onClickToken(deadTokens[0].color, deadTokens[0].n, diceN);
-            }
-        }
-
-        if (defaultPlayOutsideToken[color]) {
-            if (diceN !== 6 || !validTokens
-                .find(t => Token.tracker[t.color][t.n].pos === -1)) {
-                const outsideTokens = getOutsideTokens(validTokens);
-                if (outsideTokens && outsideTokens.length > 0) {
-                    if (outsideTokens.length === 1 || allAreTogether(outsideTokens)) {
-                        return onClickToken(outsideTokens[0].color, outsideTokens[0].n, diceN);
-                    }
-                }
-            }
-        }
-
-        if (playerType[color] === 'manual') {
-            keyValidity.select = true;
-        } else if (playerType[color] === 'automatic') {
-            return playAutomatically(color, diceN, validTokens);
+        if (playerType[data.color] === 'automatic') {
+            return playAutomatically(data.color, diceN, validTokens);
         }
 
     }, timeOutMS);
@@ -668,7 +451,6 @@ function onClickPlayButton(color) {
 
 function playAutomatically(color, diceN, validTokens) {
     console.log(JSON.stringify(validTokens));
-    // return onClickToken(validTokens[0].color, validTokens[0].n, diceN);
 
     for (let i = 0; i < validTokens.length; i++) {
         const vt = validTokens[i];
@@ -712,7 +494,9 @@ function playAutomatically(color, diceN, validTokens) {
     if (validTokens[1]) { console.log(JSON.stringify(validTokens[1].w)); console.log(validTokens[1].wTotal) };
     if (validTokens[2]) { console.log(JSON.stringify(validTokens[2].w)); console.log(validTokens[2].wTotal) };
     if (validTokens[3]) { console.log(JSON.stringify(validTokens[3].w)); console.log(validTokens[3].wTotal) };
-    return onClickToken(validTokens[0].color, validTokens[0].n, diceN);
+    const data = { color: validTokens[0].color, n: validTokens[0].n, diceN };
+    onClickToken(data);
+    return;
 }
 
 function calculatePositionWeightage(vt) {
@@ -950,7 +734,11 @@ function makeValidTokensClickable(diceN) {
             validTokens.push(currentTokenTrackingObj.ref);
             $('#token-' + currentPlayerColor + '-' + (i + 1)).addClass('clickable');
             $('#token-' + currentPlayerColor + '-' + (i + 1)).on('click', function () {
-                onClickToken(currentPlayerColor, i + 1, diceN);
+                if (currentPlayerColor === thisTeam) {
+                    const data = { color: currentPlayerColor, n: i + 1, diceN };
+                    emit('clickToken', data);
+                    onClickToken(data);
+                }
             });
             $('#token-' + currentPlayerColor + '-' + (i + 1)).on('mouseover', function () {
                 onMouseoverToken(currentPlayerColor, i + 1, diceN);
@@ -963,12 +751,12 @@ function makeValidTokensClickable(diceN) {
     return validTokens;
 }
 
-function onClickToken(color, n, diceN) {
+function onClickToken(data) {
+    const color = data.color;
+    const n = data.n;
+    const diceN = data.diceN;
     activities.push(color + '-' + n + ' token selected for progress');
     onMouseoutToken(color, n, diceN);
-    selectedTokenI = undefined;
-    keyValidity.select = false;
-    keyValidity.go = false;
     playAudio('audio-token-move');
     $('.estimate').removeClass('estimate');
     $('.lastplayed').removeClass('lastplayed');
@@ -1065,7 +853,11 @@ function drawCells() {
         cellHTML += '<tr class="row" id="row-' + i + '">';
         if (i !== 16) {
             for (let j = 0; j < 17; j++) {
-                cellHTML += '<td class="cell" id="cell-' + i + '-' + j + '"></td>';
+                cellHTML += '<td class="cell';
+                if ((j === 0 || j === 16 && 1 <= i <= 15) || i === 0) {
+                    cellHTML += ' teamColor';
+                }
+                cellHTML += '" id="cell-' + i + '-' + j + '"></td>';
             }
         } else {
             cellHTML += '<td colspan="17" class="cell bottom" id="cell-' + i + '"></td>';
@@ -1074,11 +866,10 @@ function drawCells() {
     }
     cellHTML += '</table>';
     $('#main').append(cellHTML);
+    displayNames();
+    setTeamColor();
 
-    drawSettingsButton(16, 0);
     drawSoundButton(15, 0);
-    drawNPlayerButton(14, 0);
-    drawPlayPauseButton(13, 0);
 }
 
 function styleCells() {
@@ -1090,29 +881,29 @@ function styleCells() {
                 $('#cell-' + i + '-' + j).css({
                     'border-right': 'none',
                     'border-bottom': 'none',
-                    'background': 'orange'
+                    // 'background': 'orange'
                 });
             } else if (i === 0 && j === n - 1) {
                 $('#cell-' + i + '-' + j).css({
                     'border-left': 'none',
                     'border-bottom': 'none',
-                    'background': 'orange'
+                    // 'background': 'orange'
                 });
             } else if (i === n - 1) {
                 $('#cell-' + i).css({
-                    'background': 'orange'
+                    // 'background': 'orange'
                 });
             } else if (i > 0 && i < n - 1 && (j === 0 || j === n - 1)) {
                 $('#cell-' + i + '-' + j).css({
                     'border-top': 'none',
                     'border-bottom': 'none',
-                    'background': 'orange'
+                    // 'background': 'orange'
                 });
             } else if (j > 0 && j < n - 1 && i === 0) {
                 $('#cell-' + i + '-' + j).css({
                     'border-left': 'none',
                     'border-right': 'none',
-                    'background': 'orange'
+                    // 'background': 'orange'
                 });
             }
             // style red base
@@ -1247,7 +1038,6 @@ function Token(color, n) {
             star.ref.hide();
         }
         $('#cell-' + y + '-' + x).append(tokenHTML);
-        // $('#cell-' + y + '-' + x).addClass('token');
         $('#token-' + this.color + '-' + this.n).css({
             'background': this.color,
             'background-image': 'linear-gradient(' + this.color + ', white, ' + this.color
@@ -1263,9 +1053,6 @@ function Token(color, n) {
     };
     this.erase = function () {
         $('#token-' + this.color + '-' + this.n).remove();
-        // if (Token.tracker[this.color] && Token.tracker[this.color][this.n]) {
-        // delete Token.tracker[this.color][this.n];
-        // }
     };
     this.drawEstimate = function (x, y) {
         const estimateHTML = '<div class="estimate ' + this.color + ' ' + this.n + '" id="estimate-' + this.color + '-' + this.n + '"></div>';
@@ -1273,19 +1060,6 @@ function Token(color, n) {
     };
     this.eraseEstimate = function (x, y) {
         $('#estimate-' + this.color + '-' + this.n).remove();
-    };
-    this.move = function (moveX, moveY) {
-        if (!moveY) {
-            moveY = 0;
-        }
-        const currentX = Token.tracker[this.color][this.n].x;
-        const currentY = Token.tracker[this.color][this.n].y;
-        const star = isStar(currentX, currentY);
-        if (star) {
-            star.ref.show();
-        }
-        this.erase();
-        this.draw(currentX + moveX, currentY + moveY);
     };
     this.progress = function (n) {
         if (Token.tracker[this.color][this.n].pos === undefined) {
@@ -1425,7 +1199,7 @@ function Token(color, n) {
         }
     };
 }
-Token.tracker = {
+Token.tracker = { // dynamic
     red: {
         1: {
             ix: 2,
@@ -1531,6 +1305,14 @@ Token.tracker = {
         }
     }
 };
+
+// function updateTokenTracker(updateObj) {
+//     for (let color in colors) {
+//         for (let n = 1; n <= 4; n++) {
+//             Token.tracker[color][n].pos = updateObj[color][n].pos;
+//         }
+//     }
+// }
 
 function isFinished(color) {
     let point = 0;

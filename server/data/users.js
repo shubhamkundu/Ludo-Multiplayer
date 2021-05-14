@@ -22,11 +22,21 @@ class Users {
 
     addUser(id, name, room) {
         const userCountByRoom = this.getUserCountByRoom(room);
+        let team;
+        if (userCountByRoom === 0) {
+            team = 'red';
+        } else if (userCountByRoom === 1) {
+            team = 'blue';
+        } else if (userCountByRoom === 2) {
+            team = 'yellow';
+        } else if (userCountByRoom === 3) {
+            team = 'green';
+        }
         const userToAdd = {
             id,
             name,
             room,
-            team: userCountByRoom === 0 ? 'white' : 'black'
+            team
         };
         const user = this.list.find(u => u.id === userToAdd.id);
         if (user) {
