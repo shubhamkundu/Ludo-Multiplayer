@@ -187,7 +187,9 @@ function displayNames() {
         const lnameCellId = `cell-${positions[user.team].lname.y}-${positions[user.team].lname.x}`;
         $(`#${fnameCellId}`).text(fname);
         $(`#${lnameCellId}`).text(lname);
-        $(`#cell-0-1`).html(fname + '_' + lname);
+        if (user.team === thisTeam) {
+            $(`#cell-0-1`).html(fname + '_' + lname);
+        }
     }
 }
 
