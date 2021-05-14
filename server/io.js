@@ -4,7 +4,7 @@ const moment = require('moment');
 const { validateString } = require('./utils/validation.js');
 const { users } = require('./data/users.js');
 
-let gameInProgress;
+const gameInProgress = {};
 
 module.exports = (io) => {
     io.on('connection', (socket) => {
@@ -33,7 +33,7 @@ module.exports = (io) => {
                 });
             }
 
-            if (gameInProgress) {
+            if (gameInProgress[joinData.room]) {
                 return fail({
                     type: 'GameInProgress',
                     message: `Game already started in room: ${joinData.room}. Please join another room.`
@@ -66,7 +66,7 @@ module.exports = (io) => {
             // });
 
             socket.on('clickPlayButtonS', (data, done, fail) => {
-                gameInProgress = true;
+                gameInProgress[thisUser.room] = true;
                 console.log(`clickPlayButtonS with ${JSON.stringify(data)}`);
                 data.thisUser = thisUser;
                 try {
@@ -142,6 +142,10 @@ module.exports = (io) => {
 
         socket.on('disconnect', () => {
             const user = users.removeUser(socket.id);
+            const userCountByRoom = users.getUserCountByRoom(user.room);
+            if (userCountByRoom === 0) {
+                gameInProgress[user.room] = false;
+            }
             if (_.isString(user)) {
                 console.log(`${user} left!!!!!!!!!!!!!!!!!!!!!!`);
                 return;
